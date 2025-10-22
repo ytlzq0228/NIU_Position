@@ -180,8 +180,10 @@ def traccar_report(app_token,vehicle_SN):
 
 				# 时间戳
 				timestamp_ms=int(vehicle_data["data"]["gpsTimestamp"])
-				ts = datetime.utcfromtimestamp(timestamp_ms / 1000).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-				ts_system = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+				#ts = datetime.utcfromtimestamp(timestamp_ms / 1000).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+				#ts_system = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+				ts = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+				ts_system = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
 				payload={"id": str(vehicle_SN),"timestamp": ts_system}
 				still_wait_count+=1
 				speed=vehicle_data['data']['nowSpeed']
