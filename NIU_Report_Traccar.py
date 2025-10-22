@@ -2,7 +2,6 @@ import sys
 import os
 import time
 import re
-import serial
 import configparser
 import socket
 import requests
@@ -256,4 +255,3 @@ if __name__ == "__main__":
 
 	#traccar_report("123",position_key)
 
-	
