@@ -6,6 +6,7 @@ import configparser
 import socket
 import requests
 import json
+import threading
 from math import sin, cos, sqrt, pi
 import requests
 from datetime import datetime, timezone
@@ -247,13 +248,29 @@ def traccar_report(app_token,vehicle_SN):
 			time.sleep(1)
 
 
-
+def start_traccar_thread(app_token, sn):
+	t = threading.Thread(
+		target=traccar_report,
+		args=(app_token, sn),
+		name=f"traccar_{sn}",
+		daemon=True  # 主进程退出时自动结束
+	)
+	t.start()
+	return t
 
 
 if __name__ == "__main__":
 	app_token="eyJhbGciOiJIUzUxMiIsImtpZCI6IjRWTU03eUU5bUYyOW16SmJ4WWxqVWdwUzIwY3FNOTlSc2NDNCIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ6NmVsUzRDQm1HQzJDd3p1enJDTGwwaWljaGlkVkxENlNtdDlLaWpnQU9pTUpCaWRHUTJXZUY0dnJMTklEUEZQIiwiZXhwIjoxNzYxNzM0Mjg0LCJpYXQiOjE3NjExMjk0ODQyMDM5MzA3ODYsInN1YiI6IjU3ZWQwYTMxZGY2ZDkwM2IwNTBiOTlkZSJ9.bepj6MSaMY4xKUclI3K-BVEC951emDosk8IINkNuDFrf_Ikogq8XaaRYLYF4UN-vp1VIxfD5LeoScHZlFLS0fQ"
-	vehicle_SN="UY2L394B9128Z7NJ"
-	traccar_report(app_token,vehicle_SN)
+	sn1 = "UY2L394B9128Z7NJ"
+	sn2 = "US2L363W646ZCZBP"
 
-	#traccar_report("123",position_key)
+	t1 = start_traccar_thread(app_token, sn1)
+	t2 = start_traccar_thread(app_token, sn2)
+
+	# 主线程保持存活；也可以用 join()
+	try:
+		while True:
+			time.sleep(3600)
+	except KeyboardInterrupt:
+		pass
 
