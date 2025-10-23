@@ -11,48 +11,16 @@ from math import sin, cos, sqrt, pi
 import requests
 from datetime import datetime, timezone
 from collections import deque
+from config_ops import load_config,get_config,save_token_to_config
 
 FAILED_QUEUE = deque(maxlen=2000)
 
-TRACCAR_REPORT_INTERVAL=2
-STILL_SPEED_THRESHOLD=0
-TRACCAR_URL="http://traccar.ctsdn.com:2232"
+traccar_config = get_config("Traccar_Config")
+TRACCAR_REPORT_INTERVAL=int(traccar_config.get("traccar_report_interval",5))
+STILL_SPEED_THRESHOLD=int(traccar_config.get("still_speed_threshold",0))
+STILL_REPORT_INTERVALL=int(traccar_config.get("still_report_interval",120))
+TRACCAR_URL=traccar_config.get("traccar_url")
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.ini")
-
-_config = None
-
-def load_config(path: str = CONFIG_PATH):
-	"""加载 ini 配置文件（单例缓存）"""
-	global _config
-	if _config is None:
-		config = configparser.ConfigParser()
-		config.read(path, encoding="utf-8")
-		_config = config
-	return _config
-
-def get_config(section: str) -> dict:
-	"""获取某个 section 的配置字典"""
-	config = load_config()
-	if section not in config:
-		raise KeyError(f"配置文件中缺少 section [{section}]")
-	return dict(config[section])
-
-def save_token_to_config(app_token_data) -> None:
-	"""把 token 写回 config.ini 的对应 section，并记录更新时间"""
-	section="NIU-Account"
-	cfg = load_config()
-	if not cfg.has_section(section):
-		cfg.add_section(section)
-	token_data=app_token_data["data"]
-	cfg.set(section, "access_token", token_data["access_token"])
-	cfg.set(section, "refresh_token", token_data["refresh_token"])
-	cfg.set(section, "refresh_token_expires_in", str(token_data["refresh_token_expires_in"]))
-	cfg.set(section, "token_expires_in", str(token_data["token_expires_in"]))
-	# 原地写回文件
-	with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-		cfg.write(f)
-	print(f"[{section}] 保存缓存 token_data={token_data}")
 
 def save_log(message):
 	print(message)
@@ -210,6 +178,7 @@ def get_vehicle_data(app_token,vehicle_SN):
 def traccar_report(app_token,vehicle_SN):
 
 	report_traccar_timestamp=0
+	still_report_traccar_timestamp=0
 	# 简单的状态码是否重试的判定集合
 	RETRYABLE_HTTP = {408, 429, 500, 502, 503, 504}
 	still_wait_count=61
@@ -282,24 +251,27 @@ def traccar_report(app_token,vehicle_SN):
 
 				# 时间戳
 				timestamp_ms=int(vehicle_data["data"]["gpsTimestamp"])
-				#ts = datetime.utcfromtimestamp(timestamp_ms / 1000).replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-				#ts_system = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 				ts = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 				ts_system = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-				payload={"id": str(vehicle_SN),"timestamp": ts_system}
-				still_wait_count+=1
+				#payload={"id": str(vehicle_SN),"timestamp": ts_system}
+				#still_wait_count+=1
+				
 				speed=vehicle_data['data']['nowSpeed']
-				if float(speed) > STILL_SPEED_THRESHOLD or still_wait_count>60:
-					still_wait_count=0
-					payload = {
-						"id": str(vehicle_SN),
-						"lat": f"{float(lat):.7f}",
-						"lon": f"{float(lon):.7f}",
-						"timestamp": ts
-					}
-					# km/h -> knots
-					payload["speed"] = f"{float(vehicle_data['data']['nowSpeed']) * 3600 / 1852:.2f}"
-					#payload["speed"] = f"{float(vehicle_data['data']['nowSpeed']) / 1.852:.2f}"
+				
+				if float(speed) > STILL_SPEED_THRESHOLD or current_timestamp - still_report_traccar_timestamp > STILL_REPORT_INTERVALL:
+					still_report_traccar_timestamp = current_timestamp
+				else:
+					continue
+				
+				payload = {
+					"id": str(vehicle_SN),
+					"lat": f"{float(lat):.7f}",
+					"lon": f"{float(lon):.7f}",
+					"timestamp": ts
+				}
+				# km/h -> knots
+				payload["speed"] = f"{float(vehicle_data['data']['nowSpeed']) * 3600 / 1852:.2f}"
+				#payload["speed"] = f"{float(vehicle_data['data']['nowSpeed']) / 1.852:.2f}"
 	
 				if vehicle_data.get("data",{}).get("batteries",{}).get("compartmentA",{}).get("batteryCharging") is not None:
 					payload["batteryLevel"] = f"{float(vehicle_data['data']['batteries']['compartmentA']['batteryCharging']):.1f}"
