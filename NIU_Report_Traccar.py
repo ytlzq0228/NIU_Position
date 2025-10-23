@@ -21,6 +21,66 @@ STILL_SPEED_THRESHOLD=int(traccar_config.get("still_speed_threshold",0))
 STILL_REPORT_INTERVALL=int(traccar_config.get("still_report_interval",120))
 TRACCAR_URL=traccar_config.get("traccar_url")
 
+EARLY_REFRESH_SECONDS = 60  # 提前刷新窗口
+
+class TokenManager:
+	def __init__(self, account_cfg_loader):
+		"""
+		account_cfg_loader: 一个可调用，返回最新的 account_cfg（例如 lambda: get_config("NIU-Account")）
+		"""
+		self._account_cfg_loader = account_cfg_loader
+		self._lock = threading.RLock()
+		self._cache_token = ""		  # 内存里的最新 access_token
+		self._cache_expire_ts = 0	   # token_expires_in（秒）
+		self._last_load_ts = 0		  # 防止过于频繁地去磁盘取
+		self._load_interval = 3		 # 每 3s 允许从磁盘重新 load 一次
+
+	def _load_expire_from_cfg(self):
+		# 读取磁盘配置里的过期时间，作为近似判断（不用每次都读）
+		try:
+			cfg = self._account_cfg_loader() or {}
+			self._cache_token = cfg.get("access_token") or self._cache_token
+			self._cache_expire_ts = int(cfg.get("token_expires_in") or 0)
+		except Exception:
+			pass
+
+	def invalidate(self):
+		"""明确标记内存 token 失效，强制下次 get() 走刷新逻辑"""
+		with self._lock:
+			self._cache_expire_ts = 0
+
+	def get(self) -> str:
+		"""
+		返回一个“确保可用”的 token：
+		1) 内存里未过期（含提前窗口）则直接用；
+		2) 否则调用你已有的 get_app_token()，它会优先 refresh、再 fallback 登录；
+		3) 刷新成功后由 save_token_to_config() 落盘，再把内存同步成最新。
+		"""
+		now = int(time.time())
+		with self._lock:
+			# 轻量地从磁盘同步一下（避免 token 在别处更新而这里不知道）
+			if now - self._last_load_ts >= self._load_interval:
+				self._load_expire_from_cfg()
+				self._last_load_ts = now
+
+			if self._cache_token and now < (self._cache_expire_ts - EARLY_REFRESH_SECONDS):
+				return self._cache_token
+
+			# 走你现有的聚合逻辑（内部已处理：未过期优先、refresh、最后登录）
+			account_cfg = self._account_cfg_loader()
+			new_token = get_app_token(account_cfg)
+			if new_token:
+				# 再次同步最新到内存
+				try:
+					cfg = self._account_cfg_loader() or {}
+					self._cache_token = cfg.get("access_token") or new_token
+					self._cache_expire_ts = int(cfg.get("token_expires_in") or 0)
+				except Exception:
+					self._cache_token = new_token
+					self._cache_expire_ts = now + 300  # 给个保底 5 分钟
+				return self._cache_token
+
+			raise RuntimeError("无法获取可用 token")
 
 def save_log(message):
 	print(message)
@@ -247,7 +307,7 @@ def get_vehicle_data(app_token,vehicle_SN):
 		save_log(f"API调用失败{err}")
 		return None
 
-def traccar_report(app_token,vehicle_SN):
+def traccar_report(token_mgr,vehicle_SN):
 
 	report_traccar_timestamp=0
 	still_report_traccar_timestamp=0
@@ -302,6 +362,14 @@ def traccar_report(app_token,vehicle_SN):
 			if current_timestamp - report_traccar_timestamp >= TRACCAR_REPORT_INTERVAL:
 				report_traccar_timestamp = current_timestamp
 
+				# === 关键：每次调用 API 前现取 token ===
+				try:
+					app_token = token_mgr.get()
+				except Exception as e:
+					save_log(f"Get token failed: {e}")
+					time.sleep(1)
+					continue
+
 				#获取小牛在线数据
 				vehicle_data=get_vehicle_data(app_token,vehicle_SN)
 				if vehicle_data is None:
@@ -315,6 +383,7 @@ def traccar_report(app_token,vehicle_SN):
 					time.sleep(1)
 					continue
 				
+
 				located_time = vehicle_data["data"]["gpsTimestamp"]
 				#print(f"GCJ-02 坐标: {lat_gcj}, {lon_gcj}  时间戳: {located_time}")
 				lat_wgs, lon_wgs = gcj_to_wgs_exact(lat_gcj, lon_gcj)
@@ -392,10 +461,10 @@ def traccar_report(app_token,vehicle_SN):
 			save_log(f"Traccar Report Error: {loop_err}")
 			time.sleep(1)
 
-def start_traccar_thread(app_token, sn):
+def start_traccar_thread(token_mgr, sn):
 	t = threading.Thread(
 		target=traccar_report,
-		args=(app_token, sn),
+		args=(token_mgr, sn),
 		name=f"traccar_{sn}",
 		daemon=True  # 主进程退出时自动结束
 	)
@@ -403,14 +472,15 @@ def start_traccar_thread(app_token, sn):
 	return t
 
 def NIU_report_traccar():
-	account_cfg = get_config("NIU-Account")
-	app_token=get_app_token(account_cfg)
-	if not app_token:
-		print("无法获取APP TOKEN")
-		return
+	# 用一个 loader，确保每次都能拿到最新配置（save_token_to_config 落盘后可读到）
+	token_mgr = TokenManager(lambda: get_config("NIU-Account"))
+
+	# 取一次当前可用 token 获取车辆列表
+	app_token = token_mgr.get()
 	vehicle_list=get_vehicle_list(app_token)
+	
 	for sn in vehicle_list:
-		start_traccar_thread(app_token, sn)
+		start_traccar_thread(token_mgr, sn)
 	try:
 		while True:
 			time.sleep(3600)
