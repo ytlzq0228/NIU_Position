@@ -4,14 +4,16 @@ import requests
 from config_ops import load_config,get_config,save_token_to_config
 EARLY_REFRESH_SECONDS = 60  # 提前刷新窗口
 
-def login_get_token(account,password):
+APP_ID=get_config("NIU-Account").get("app_id")
+
+def login_get_token(app_id,account,password):
 	url = f"https://account.niu.com/v3/api/oauth2/token"
 	
 	try:
 		data={
 			"grant_type":"password",
 			"scope":"base",
-			"app_id":"niu_h8nv8eaz",
+			"app_id":app_id,
 			"account":account,
 			"password":password
 		}
@@ -27,14 +29,14 @@ def login_get_token(account,password):
 		print(f"login_get_token API调用失败{err}")
 		return None
 
-def refresh_app_token(refresh_token):
+def refresh_app_token(app_id,refresh_token):
 	url = f"https://account.niu.com/v3/api/oauth2/token"
 	
 	try:
 		data={
 			"grant_type":"refresh_token",
 			"scope":"base",
-			"app_id":"niu_h8nv8eaz",
+			"app_id":app_id,
 			"refresh_token":refresh_token
 		}
 		resp = requests.post(url, data=data, timeout=10)
@@ -102,21 +104,23 @@ def get_app_token(account_cfg):
 			#	pass
 		
 		if refresh_token and now_ts<refresh_token_expire_ts:
-			app_token_data=refresh_app_token(account_cfg["refresh_token"])
+			app_token_data=refresh_app_token(APP_ID,account_cfg["refresh_token"])
+			if app_token_data:
+				app_token=app_token_data.get("data",{}).get("access_token")
+				if check_token_valid(app_token):
+					save_token_to_config(app_token_data)
+					print(f"refresh new app_token:{app_token[:8]}****{app_token[-8:]}")
+					return app_token
+				#else:
+				#	pass
+
+		app_token_data=login_get_token(APP_ID,account_cfg["account"],account_cfg["password"])
+		if app_token_data:
 			app_token=app_token_data.get("data",{}).get("access_token")
 			if check_token_valid(app_token):
 				save_token_to_config(app_token_data)
-				print(f"refresh new app_token:{app_token[:8]}****{app_token[-8:]}")
+				print(f"app_token:{app_token[:8]}****{app_token[-8:]}")
 				return app_token
-			#else:
-			#	pass
-
-		app_token_data=login_get_token(account_cfg["account"],account_cfg["password"])
-		app_token=app_token_data.get("data",{}).get("access_token")
-		if check_token_valid(app_token):
-			save_token_to_config(app_token_data)
-			print(f"app_token:{app_token[:8]}****{app_token[-8:]}")
-			return app_token
 		return None
 	except Exception as err:
 		print(err)
