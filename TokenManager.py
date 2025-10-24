@@ -18,8 +18,8 @@ def login_get_token(app_id,account,password):
 			"password":password
 		}
 		resp = requests.post(url, data=data, timeout=10)
-		resp.raise_for_status()  # 检查 HTTP 状态码
-		token_data = resp.json()	   # 转换为 Python 字典
+		resp.raise_for_status()
+		token_data = resp.json()
 		if token_data.get("status")==0:
 			return token_data
 		else:
@@ -40,8 +40,8 @@ def refresh_app_token(app_id,refresh_token):
 			"refresh_token":refresh_token
 		}
 		resp = requests.post(url, data=data, timeout=10)
-		resp.raise_for_status()  # 检查 HTTP 状态码
-		token_data = resp.json()	   # 转换为 Python 字典
+		resp.raise_for_status()
+		token_data = resp.json()
 		#print(token_data)
 		if token_data.get("status")==0:
 			return token_data
@@ -100,8 +100,6 @@ def get_app_token(account_cfg):
 			if check_token_valid(app_token):
 				print(f"app_token:{app_token[:8]}****{app_token[-8:]}")
 				return app_token
-			#else:
-			#	pass
 		
 		if refresh_token and now_ts<refresh_token_expire_ts:
 			app_token_data=refresh_app_token(APP_ID,account_cfg["refresh_token"])
@@ -111,8 +109,6 @@ def get_app_token(account_cfg):
 					save_token_to_config(app_token_data)
 					print(f"refresh new app_token:{app_token[:8]}****{app_token[-8:]}")
 					return app_token
-				#else:
-				#	pass
 
 		app_token_data=login_get_token(APP_ID,account_cfg["account"],account_cfg["password"])
 		if app_token_data:
@@ -121,6 +117,7 @@ def get_app_token(account_cfg):
 				save_token_to_config(app_token_data)
 				print(f"app_token:{app_token[:8]}****{app_token[-8:]}")
 				return app_token
+		
 		return None
 	except Exception as err:
 		print(err)
@@ -129,9 +126,6 @@ def get_app_token(account_cfg):
 
 class TokenManager:
 	def __init__(self, account_cfg_loader):
-		"""
-		account_cfg_loader: 一个可调用，返回最新的 account_cfg（例如 lambda: get_config("NIU-Account")）
-		"""
 		self._account_cfg_loader = account_cfg_loader
 		self._lock = threading.RLock()
 		self._cache_token = ""		  # 内存里的最新 access_token
@@ -174,7 +168,6 @@ class TokenManager:
 					print("缓存Token失效，重新获取")
 					pass
 
-			# 走你现有的聚合逻辑（内部已处理：未过期优先、refresh、最后登录）
 			account_cfg = self._account_cfg_loader()
 			new_token = get_app_token(account_cfg)
 			if new_token:
