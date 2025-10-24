@@ -1,0 +1,12 @@
+[NIU-Account]
+account = 186****7302
+password = 95d3********1fa14b
+
+
+[Traccar_Config]
+enable = True
+traccar_url = http://traccar.yourdomain.com
+traccar_report_interval = 5
+still_speed_threshold = 0
+still_report_interval = 120
+
