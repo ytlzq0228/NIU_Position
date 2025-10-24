@@ -98,7 +98,7 @@ def get_vehicle_list(app_token):
 				vehicle_list.append(i["sn_id"])
 		return vehicle_list
 	except Exception as err:
-		print(f"API调用失败{err}")
+		print(f"API调用失败{err}, resp.json():{vehicle_list_data}")
 		return None
 
 def get_vehicle_data(app_token,vehicle_SN):
@@ -122,7 +122,6 @@ def get_vehicle_data(app_token,vehicle_SN):
 		if not vehicle_data.get("data"):
 			print("登录失败",vehicle_data)
 			return None
-		#print(json.dumps(vehicle_data, ensure_ascii=False, indent=2))
 		if vehicle_data.get("data",{}).get("isConnected"):
 			return vehicle_data
 		else:
@@ -218,8 +217,6 @@ def traccar_report(token_mgr,vehicle_SN):
 				timestamp_ms=int(vehicle_data["data"]["gpsTimestamp"])
 				ts = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 				ts_system = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-				#payload={"id": str(vehicle_SN),"timestamp": ts_system}
-				#still_wait_count+=1
 				
 				speed=vehicle_data['data']['nowSpeed']
 				
@@ -301,16 +298,15 @@ def NIU_report_traccar():
 
 	# 取一次当前可用 token 获取车辆列表
 	app_token = token_mgr.get()
-	print(app_token)
 	vehicle_list=get_vehicle_list(app_token)
-	
-	for sn in vehicle_list:
-		start_traccar_thread(token_mgr, sn)
-	try:
-		while True:
-			time.sleep(3600)
-	except KeyboardInterrupt:
-		pass
+	if vehicle_list:
+		for sn in vehicle_list:
+			start_traccar_thread(token_mgr, sn)
+		try:
+			while True:
+				time.sleep(3600)
+		except KeyboardInterrupt:
+			pass
 
 
 if __name__ == "__main__":

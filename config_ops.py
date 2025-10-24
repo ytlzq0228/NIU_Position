@@ -40,4 +40,4 @@ def save_token_to_config(app_token_data) -> None:
 	# 原地写回文件
 	with open(CONFIG_PATH, "w", encoding="utf-8") as f:
 		cfg.write(f)
-	print(f"[{section}] 保存缓存 token_data={token_data}")
+	#print(f"[{section}] 保存缓存 token_data={token_data}")
