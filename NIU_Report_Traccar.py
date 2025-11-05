@@ -118,11 +118,10 @@ def get_vehicle_data(app_token,vehicle_SN):
 		resp = requests.get(url, headers=headers, timeout=10)
 		resp.raise_for_status()  # 检查 HTTP 状态码
 		vehicle_data = resp.json()	   # 转换为 Python 字典
-		#print(vehicle_data)
 		if not vehicle_data.get("data"):
 			print("登录失败",vehicle_data)
 			return None
-		if vehicle_data.get("data",{}).get("status")==0:
+		if vehicle_data.get("status")==0:
 			return vehicle_data
 		else:
 			return None
