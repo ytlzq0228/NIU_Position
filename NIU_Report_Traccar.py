@@ -122,7 +122,7 @@ def get_vehicle_data(app_token,vehicle_SN):
 		if not vehicle_data.get("data"):
 			print("登录失败",vehicle_data)
 			return None
-		if vehicle_data.get("data",{}).get("isConnected"):
+		if vehicle_data.get("data",{}).get("status")==0:
 			return vehicle_data
 		else:
 			return None
